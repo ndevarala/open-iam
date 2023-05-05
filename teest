@@ -1,0 +1,460 @@
+Deploying via Docker
+This section describes how to deploy the OpenIAM platform in a Docker Swarm environment. The procedures described in this section must be performed in the order that they are presented. Some steps in this installation require root level privileges to the system where OpenIAM will be deployed.
+
+What is Docker?
+Docker is a tool for creating, deploying, and running applications using containers. Docker Compose is a tool for defining and running multi-container Docker applications. Docker provides a standardized, lightweight, execution environment that maintains all dependencies within it. It can be run on either physical or virtualized environments which are on-premise or in the cloud. For more information about docker, please see see the Docker website and Docker Documentation.
+
+OpenIAM on Docker
+The OpenIAM Docker deployment method enables you to deploy on OpenIAM using a series of pre-configured containers in a short amount of time without the complexity of deploying a series of dependencies. The simplified deployment method requires:
+
+Installing the Docker software
+Configuring environment variables
+Running scripts for setting up and starting up the OpenIAM instance. Running the deployment scripts automatically takes care of all component dependencies and release updates.
+OpenIAM docker containers are maintained on Docker hub. Once these containers have been pulled into your environment using the details below, you will also need:
+
+Docker client - Docker Community Edition (CE) versions 19.03.12 or higher
+Docker compose - Defines and enables the operation of a multi-container Docker application. OpenIAM uses docker-compose file format 3.2
+OpenIAM Solution Stacks
+The OpenIAM solution consists of several stacks that are deployable the Docker Swarm. Docker swarm is a container orchestration tool, meaning that it allows for the manage multiple containers deployed across multiple host machines. The content of each stack is described below
+
+Critical Infrastructure stacks
+The infrastructure stacks are used across the OpenIAM solution regardless of the functionality that you are enabling. These components must be operational for the OpenIAM solution to function correctly.
+
+Stack Name	Description
+Elasticsearch	Runs Elasticsearch. Elasticsearch is an enterprise-level search engine. Elasticsearch uses an index-based search approach, which allows for fast searching. The architecture allows for scalability, flexibility, and multi-tenancy support
+Redis	Runs Redis. Redis is an in-memory data structure store used as a database, cache, and message broker by OpenIAM
+MariaDB / PostgresSQL	Runs either MariaDB or PostgreSQL as the product repository. MariaDB is configured as the default repository. Aside from these two databases, you can also use a remote database
+RabbitMQ	Runs RabbitMQ. RabbitMQ is the message brokering software service for sending and receiving messages between systems
+Vault	Runs Hashicorp's Vault. Vault secures, stores, and tightly controls access to tokens, passwords, certificates, API keys, and other secrets
+Etcd	Runs Etcd, which is used to store Vault data. Etcd is a distributed key-value store.
+MariaDB is the default Database. You can change this to PostgreSQL if you prefer. You will not enable both database
+
+Service stacks
+Stack Name	Description
+OpenIAM core services	Runs services shared across the product.
+Identity manager	Runs the identity manager application. Identity manager automates the task of managing identities across various devices and applications used by the enterprise.
+Workflow	Runs the workflow application. A workflow is a repeatable process during which documents, information, or requests are passed from one participant to another for action, according to a set of procedural rules. A participant can be a person, machine, or both.
+Groovy manager	Runs Groovy Manager, an application for managing Groovy scripts in OpenIAM. Apache Groovy is a dynamic programming language for the Java platform. allows you to add, update, edit, and modify Groovy scripts to extend the identity governance and web access management functionality to meet specific, complex requirements.
+Synchronization	Runs the synchronization application. Synchronization allows you to synchronize data from one or more authoritative sources to a set of managed systems. Synchronization configuration enables monitoring a source system for changes and then updating target systems at scheduled periodic intervals.
+Reconciliation	Runs the reconciliation application. This is two side synchronization between OpenIAM and the target system
+Authorization manager	Runs the authorization manager. This module handles RBAC authorization via relationships between Users, Organizations, Roles, Groups, and Resources.
+E-mail Manager	Runs the email manager. Handles sending and receiving email.
+UI Stack
+Stack Name	Description
+Tomcat with three applications	Three web applications which are described below
+IdP - The OpenIAm web application which provides centralized authentication and self-service password reset functionality. This application also allows OpenIAM to be configured as both an Identity Provider and a Service Provider
+Webconsole - The OpenIAM web application for administrators for managing identities across various devices and applications used by an enterprise, and for controlling access to these devices and applications.
+Self-service - The OpenIAM end-user web application that allows users to create new requests, reset and change passwords, manage their profiles, manage access requests, manage challenge response security questions, look up corporate users through a directory search, and reset their accounts if they are locked out. Authorized users can also use the request approval functionality.
+Reverse Proxy Stack
+Stack Name	Description
+Apache Web server with rProxy	Gateway between clients and a server for managing inbound traffic to a server.
+System requirements
+The table below specifies the minimum system requirements for deploying a non-production OpenIAM v4.2.x instance using Docker.
+
+MINIMUM Hardware requirements
+Configuration	Non-Production	Production (may increase based on sizing)
+Memory	48 GB	64 GB
+CPU	8 CPUs	12 CPUs
+Disk	80 GB	200 GB
+Please ensure that you are environment is aligned with the minimum system requirements described above. These parameters are not optional. OpenIAM will not start if system resources are below the minimum levels.
+
+For production use: Customers with active subscriptions and partners, should contact OpenIAM Support (techsupport@openiam.com) for assistance with sizing requirements.
+
+Software requirements
+Specification	Requirement
+OS	Ubuntu (20.04 LTS) or CentOS 8 Stream/RHEL 8.5+
+Docker client	20.10.3 or higher
+Docker compose	1.28.2 or higher
+Supported Browsers	Google Chrome (v89.0.4389.114 and later), Microsoft Edge, Mozilla Firefox (v87 and later). Note: Internet Explorer (IE) is not supported.
+Preparing your system
+The OpenIAM application requires the configurations described below to be performed prior to installing the application.
+
+Install pre-requisite packages
+Prior to installing the OpenIAM, please execute the commands below to install the required packages. If you have already logged in as root, you do not need to prefix them with “sudo”. If you have used another account, then you need to use “sudo”
+
+Description	Command on CentOS 8 Stream	Command on Ubuntu
+Update the OS	dnf update	apt-get update
+Install Nano	dnf install nano	apt-get install nano
+Install wget	dnf install wget	apt-get install wget
+Install git	dnf install git	apt-get install git
+Example for CentOS 8 Stream
+
+dnf update
+dnf install nano wget git
+Example for Ubuntu 20.04
+
+apt-get update
+apt-get upgrade
+apt-get install nano wget git
+Update the hosts file
+Make sure that your /etc/hosts file contains a value for the hostname that you defined earlier. To edit the hosts file, use an editor like Nano.
+
+127.0.0.1 iam-nonprod
+Settings for ElasticSearch and Docker
+ElasticSearch
+OpenIAM uses ElasticSearch as a search engine. To enable fast access, ElasticSearch maps portions of an index into its memory address space. This is done through nmap, a Unix system call that maps files or devices into memory. To use mmap effectively, ElasticSearch requires sufficient mmap counts. The default operating system limits on mmap counts are inadequate for the required performance and this may result in out of memory exceptions. The required mmap value can be configured by setting the vm.max_map_count value in /etc/sysctl.conf to be at least 262144. To ensure that the vm.max_map_count persists across restarts, set this value in the /etc/sysctl.conf file
+
+Disabling IPv6 on Docker Host
+By default, IPv6 is disabled in Docker. Disabling IPv6 on Docker host(s) prevents any potential network issues. To disable IPv6 on host(s) where Docker is running, ensure that the Docker host(s) have the following value set in /etc/sysctl.conf: net.ipv6.conf.all.disable_ipv6=1 and net.ipv6.conf.default.disable_ipv6 = 1
+
+To summarize, the /etc/sysctl.conf file must have the following changes:
+
+vm.max_map_count=262144
+net.ipv6.conf.all.disable_ipv6=1
+net.ipv6.conf.default.disable_ipv6=1
+Save the above changes and then run sudo sysctl -p to apply these settings without restarting the system.
+
+Install the Docker engine
+Docker Engine is a containerization technology for building and containerizing applications. Docker Engine acts as a client-server application with:
+
+A server with a long-running daemon process dockerd.
+APIs which specify interfaces that programs can use to talk to and instruct the Docker daemon.
+A command line interface (CLI) client docker
+To install the docker engine, follow the OS specific steps below. For, additional information related to the installation of the docker engine can be found at:
+
+Docker docs for CentOS / RHEL
+Docker docs for Ubuntu
+Ubuntu
+Setup the repository
+
+Update the apt package index and install packages to allow apt to use a repository over HTTPS
+
+apt-get install \
+    ca-certificates \
+    curl \
+    gnupg \
+    lsb-release
+Add Docker's official GPG Key
+
+sudo mkdir -p /etc/apt/keyrings
+ curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+Use the following command to setup the repository
+
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+Install the docker engine
+
+Update the apt package index
+ sudo apt-get update
+Note: If you receive a GPG error when running apt-get update, then follow the steps below. Your default umask may be incorrectly configured, preventing detection of the repository public key file.
+
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+ sudo apt-get update
+Install the Docker engine, containerd, and Docker compose plugin
+sudo apt-get install docker-ce docker-ce-cli containerd.io docker-compose-plugin
+Verify that Docker Engine is installed correctly by running the hello-world image.
+docker run hello-world
+
+Note: If you get the following response when running docker run hello-world, then use the work around below:
+
+Status: Downloaded newer image for hello-world:latest docker: Error response from daemon: cgroups: cgroup mountpoint does not exist: unknown. ERRO[0001] error waiting for container: context canceled
+
+Solution:
+
+mkdir /sys/fs/cgroup/systemd
+mount -t cgroup -o none,name=systemd cgroup /sys/fs/cgroup/systemd
+docker run hello-world
+
+After successfully running the Hello-world test, Login to docker hub using the command shown below. Use our hub.docker.com credentials.
+
+docker login
+You will be prompted for your userId and password.
+
+Note:Without successfully authenticating with the docker repository, you will not be able to pull the docker images required to install OpenIAM.
+CentOS 8 Stream / RHEL 8.5+
+Setup the repository
+
+Install the yum-utils package (which provides the yum-config-manager utility) and set up the stable repository
+
+yum install -y yum-utils
+
+yum-config-manager \
+    --add-repo \
+    https://download.docker.com/linux/centos/docker-ce.repo
+Install the Docker engine
+
+Install the latest version of Docker Engine and containerd. The next step is to start the engine.
+
+yum install docker-ce docker-ce-cli containerd.io
+systemctl start docker
+systemctl enable docker.service
+systemctl enable containerd.service
+Install Docker compose
+Compose is a tool for defining and running multi-container Docker applications such as OpenIAM. With Compose, you use a YAML file to configure your application’s services. Then, with a single command, you create and start all the services from your configuration. The procedure described below installs version 1.28.2 of Docker Compose on your system
+
+Run the command below to download the current stable release of Docker Compose
+curl -L "https://github.com/docker/compose/releases/download/1.28.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+Apply executable permissions to the binary
+chmod +x /usr/local/bin/docker-compose
+To check the version of docker compose, run the command below
+docker-compose --version
+Installing the OpenIAM Application
+The installation process allows for a significant amount of flexibility. The steps below describe the minimum number of parameters which need to be configured to install on a single VM. Additional details in the sections referenced by the table below. If you are new to OpenIAM, we recommend starting with the simpler path with a more limited set of options.
+
+Clone the OpenIAM Docker repository
+Next, we need to clone the "OpenIAM docker compose" repository from OpenIAM's Git Repository. This project contains scripts that set environment variables, start and stop the container services. To clone the repository, follow the steps below.
+
+They should be performed in a Linux terminal window.
+
+mkdir -p /usr/local/openiam
+cd /usr/local/openiam
+git clone https://bitbucket.org/openiam/openiam-docker-compose.git
+cd openiam-docker-compose/
+git checkout RELEASE-4.2.1.3
+The cloned repository will contain the following scripts.
+
+Script	Description
+env.sh	File containing environment variables. The required environment variables can be updated and added in this file. The env.sh file is sourced during the installation process and the export statements in this file are executed.
+setup.sh	Script for setting up and updating the OpenIAM configuration. During the initial OpenIAM deployment, this script initializes the network and pulls the latest images from the OpenIAM repository (openiamdocker) on Docker Hub. When updating the OpenIAM deployment, running this script pulls newer images from the OpenIAM repository on Docker Hub
+startup.sh	Script for starting up the OpenIAM instance.When updating the OpenIAM deployment, running this script updates the configuration on your system with the latest release updates.
+Warning: Please do not modify this script in any way.
+shutdown.sh	Script for shutting down all OpenIAM stacks, except volumes.
+teardown.sh	Script for tearing down all OpenIAM stacks, volumes, and networks.
+generate.cert.sh	Script to generate certificates or Vault authentication.
+Additional configuration options
+
+Section	Description
+Yaml Files	YAML configuration files are provided for the services and infrastructure components used within OpenIAM. These files provide configuration information for the containers.
+Configuration options	Configuration options which will be used during installation.
+Initialize Vault
+OpenIAM uses Vault in order to store secrets, such as database passwords, redis passwords, etc. Communication with Vault occurs via a certificate.
+
+Edit the /usr/local/openiam/openiam-docker-compose/env.sh file which was downloaded from the openiam-docker-compose project above.
+Set the VAULT_JKS_PASSWORD in the env.sh file. This password can be anything that you want.
+Run the command, shown below, to generate a CA Certificate.
+In the Enterprise version, you have the option to use an existing CA Certificate from a trusted CA.
+cd /usr/local/openiam/openiam-docker-compose
+sudo ./generate.cert.sh
+You should see output similar to the example shown below:
+
+SQL Files exist
+This script will generate a key-pair that vault will use.  Make sure to first set VAULT_JKS_PASSWORD in env.sh
+Press enter to continue
+Generating RSA private key, 2048 bit long modulus (2 primes)
+.......+++++
+.....................................+++++
+e is 65537 (0x010001)
+Generating RSA private key, 2048 bit long modulus (2 primes)
+...+++++
+.........+++++
+e is 65537 (0x010001)
+Signature ok
+subject=C = CZ, ST = Test, L = Test, O = Test, OU = Test, CN = vault
+Getting CA Private Key
+writing RSA key
+Upon successful completion of the above operation, you should also see several certificates related files as shown in the image below.
+
+Certificates generated
+
+Define database ports
+Starting with V4.2.0, OpenIAM uses Flyway to manage database schema generation and migrations from one version to the next. This ensures that your database is properly versioned and up-to-date. OpenIAM supports Flyway versioning for MariaDB, PostgreSQL, and MSSQL, and Oracle 12.2+
+
+The env.sh file defines properties which will be used by Flyway.
+
+At a minimum, you will need to define to set the following parameters: To enable Flyway, set the following properties in env.sh
+
+DB_TYPE - This parameter define the type of database that you will be using as the OpenIAM product repository. My default this value is set to "MariaDB" which is installed by default .
+FLYWAY_OPENIAM_HOST - Host where the OpenIAM database will be residing. This is the primary product schema. If you are using MariaDB or PostgreSQL in a docker container, set it to database
+FLYWAY_OPENIAM_PORT - Port where the OpenIAM database will be running. Default ports for the supported databases include:
+MariaDB=3306
+Postgres=5432
+Oracle=1521
+Microsoft SQL Server=1433
+FLYWAY_ACTIVITI_HOST - Host where the Activti database will be residing. Activiti, is the database used by the workflow engine. If you are using MariaDB or PostgreSQL in a docker container, set it to database
+FLYWAY_ACTIVITI_PORT - Port where Activiti database, which is used by the workflow engine, will be running.
+Initialize Docker Swarm
+Docker uses swarms for cluster management and orchestration features of Docker Engine, the technology for containerizing applications. Docker engines participating in a cluster run in the swarm mode. The swarm mode is enabled by either initializing a swarm, as in the command above, or by joining an existing swarm. For more information, see docker swarm and Swarm mode key concepts documentation.
+
+Make sure that you initialize the Docker swarm. Log into Docker and initialize the swarm by entering the following command in a terminal:
+
+sudo docker swarm init
+You will see output similar to this:
+
+Swarm initialized: current node (7risfc2161nwzir4a65po3lro) is now a manager.
+
+To add a worker to this swarm, run the following command:
+
+    docker swarm join --token SWMTKN-1-15mdug8xi71uap0dgaayqi2ohhl8qxaaeg7m8k6q015yiuqt0j-6ip90bh1rm2td8y9baoya4qlx 173.231.56.82:2377
+
+To add a manager to this swarm, run 'docker swarm join-token manager' and follow the instructions.
+Open ports for Docker Swarm
+By default, the shell scripts provided by OpenIAM deploy to the docker swarm. You must ensure that the necessary ports are opened otherwise the manager and worker node(s) will not be able to communicate with each other.
+
+Important: Please see this information about ports above 30000 used by the swarm from the load balancing section of Docker documentation: The swarm manager uses ingress load balancing to expose the services you want to make available externally to the swarm. The swarm manager can automatically assign the service a PublishedPort or you can configure a PublishedPort for the service. You can specify any unused port. If you do not specify a port, the swarm manager assigns the service a port in the 30000-32767 range.
+
+Pull the docker images
+To setup (and/or update) your configuration, you can run the setup.sh script. This will initialize the network, and pull the latest images from dockerhub.
+
+For users, familiar with OpenIAM, you can modify the script as required by your internal needs.
+
+Run the setup.sh script as shown below to pull the docker images form Docker Hub.
+sudo ./setup.sh
+This process will take several minutes. Upon successful completion, you will see the following lines at the end.
+
+...
+2629bb33b5cf: Pull complete
+c1014314cc76: Pull complete
+e315dd47e84e: Pull complete
+231169080674: Pull complete
+fdd02d8189a0: Pull complete
+Digest: sha256:31d109f31fbd8c6dc8603f8ba20545dd1ca0bfd5a64502111a09ca8549270811
+Status: Downloaded newer image for openiamdocker/vault-bootstrap:alpine-4.2.1.3-qa
+docker.io/openiamdocker/vault-bootstrap:alpine-4.2.1.3-qa
+ docker pull openiamdocker/ui:debian-4.2.1.3-qa
+debian-4.2.1.3-qa: Pulling from openiamdocker/ui
+9621f1afde84: Already exists
+646a8f97c6a8: Pull complete
+71899f9ea201: Pull complete
+e3fa4a1d1001: Pull complete
+62be76a5bde7: Pull complete
+5bdf5d42d714: Pull complete
+5f55a59bdd64: Pull complete
+1a2e81983ded: Pull complete
+d0747a4e65c1: Pull complete
+94d6d2f492b7: Pull complete
+4cea95ab71c0: Pull complete
+d027ced9e2f4: Pull complete
+a0344816b7c6: Pull complete
+d13c970f6b19: Pull complete
+e73e7e332be3: Pull complete
+2f4c52ceb617: Pull complete
+886244a565c0: Pull complete
+67a9055c93a2: Pull complete
+c1ba4c95b14b: Pull complete
+05ea48000985: Pull complete
+ffcbe89ed862: Pull complete
+d3921b29ef38: Pull complete
+5329d615ae9b: Pull complete
+c0b25714a13f: Pull complete
+fe50a21e3726: Pull complete
+7cc5fee48816: Pull complete
+ff225926367a: Pull complete
+50f1e7cbb70e: Pull complete
+4d4c14bce4a8: Pull complete
+530342dd8123: Pull complete
+c4754a5182f0: Pull complete
+e76d451814a4: Pull complete
+Digest: sha256:dc6508344b9d15c971fe52dddc5836ec5dc943d4d1bcb44ab47a62126768e549
+Status: Downloaded newer image for openiamdocker/ui:debian-4.2.1.3-qa
+docker.io/openiamdocker/ui:debian-4.2.1.3-qa
+Start the OpenIAM Application
+Now you are ready to start the OpenIAM containers. Run the startup.sh script to initiate the startup process
+
+sudo ./startup.sh
+You should see output similar to the example below
+
+root@localhost:/usr/local/openiam/openiam-docker-compose# ./startup.sh
+SQL Files exist
+Using MariaDB as the database type...
+Nothing found in stack: flyway
+etcd_storage
+vault_server_storage
+vault_client_storage
+connector_data_storage
+filebeat-storage
+openiam-janusgraph-storage
+upload_storage
+Unable to find image 'busybox:latest' locally
+latest: Pulling from library/busybox
+22b70bddd3ac: Pull complete
+Digest: sha256:6bdd92bf5240be1b5f3bf71324f5e371fe59f0e153b27fa1f1620f78ba16963c
+Status: Downloaded newer image for busybox:latest
+Creating service etcd_etcd
+Creating service vault_vault
+Creating service vault-bootstrap_vault_bootstrap
+Creating service openiam-elasticsearch-storage_service
+Creating service openiam-jks-storage_service
+Creating service openiam-activiti-storage_service
+Creating service openiam-rabbitmq-storage_service
+Creating service openiam-iamscripts-storage_service
+Creating service redis_service
+Creating service elasticsearch_service
+Creating service cassandra_cassandra
+Waiting for cassandra to become running, so that we can bring up janusgraph
+Creating service janusgraph_service
+Creating service rabbitmq_service
+openiam-mysql-storage_storage
+Creating service database_database
+Creating service flyway_flyway
+Creating service openiam_email-manager
+Creating service openiam_idm
+Creating service openiam_workflow
+Creating service openiam_business-rules-manager
+Creating service openiam_esb
+Creating service openiam_synchronization
+Creating service openiam_groovy_manager
+Creating service openiam_device-manager
+Creating service openiam_reconciliation
+Creating service openiam_sas-manager
+Creating service openiam_auth-manager
+Creating service ui_ui
+Creating service ldap-connector_service
+Creating service rproxy_rproxy
+Watch the container startup process
+The containers may take 8 to 15 minutes (depending your environment) to startup completely. You can watch the start up process using the command below. Note, that the UI container will take sometime and be among the last to start up as it has dependencies on other components being up first.
+
+watch -n 5 'docker ps'
+You should see output similar to the example below when all containers have started successfully
+
+Every 5.0s: docker ps                                                                                                                                                                                                                                                       localhost: Sun Jan  2 20:33:08 2022
+
+CONTAINER ID        IMAGE                                                      COMMAND                  CREATED             STATUS                   PORTS                                                 NAMES
+e4cb189cb809        openiamdocker/rproxy:debian-4.2.1.3-dev                    "httpd-foreground"       6 minutes ago       Up 6 minutes (healthy)   0.0.0.0:80->80/tcp, 443/tcp                           rproxy_rproxy.ksncftkkhz3y26bmqaywfpspp.ap6awho2xtf85yxgrrcy5qssu
+67bbe61cca7b        openiamdocker/ldap-connector-rabbitmq:debian-4.2.1.3-dev   "docker-entrypoint.sh"   6 minutes ago       Up 6 minutes (healthy)                                                         ldap-connector_service.ksncftkkhz3y26bmqaywfpspp.puhiaw0yw1x0541egd8xqe5oh
+49cd89c1f330        openiamdocker/ui:debian-4.2.1.3-dev                        "docker-entrypoint.s…"   6 minutes ago       Up 6 minutes (healthy)   8080/tcp                                              ui_ui.ksncftkkhz3y26bmqaywfpspp.n503ge64rng38anlql4utnvkt
+3efea0f8e49a        openiamdocker/email-manager:debian-4.2.1.3-dev             "docker-entrypoint.sh"   6 minutes ago       Up 6 minutes (healthy)                                                         openiam_email-manager.ksncftkkhz3y26bmqaywfpspp.6qxaaa9ldtom6sxanstrhlvrw
+b0471b813e15        openiamdocker/groovy-manager:debian-4.2.1.3-dev            "docker-entrypoint.sh"   6 minutes ago       Up 6 minutes (healthy)                                                         openiam_groovy_manager.ksncftkkhz3y26bmqaywfpspp.ksqqm2tdbg8paiz9vrogjfzlm
+608679ae71f7        openiamdocker/workflow:debian-4.2.1.3-dev                  "docker-entrypoint.sh"   6 minutes ago       Up 6 minutes (healthy)                                                         openiam_workflow.ksncftkkhz3y26bmqaywfpspp.mr19amzsznio37bhm51m2v91b
+53033d3b2264        openiamdocker/auth-manager:debian-4.2.1.3-dev              "docker-entrypoint.sh"   6 minutes ago       Up 6 minutes (healthy)                                                         openiam_auth-manager.ksncftkkhz3y26bmqaywfpspp.v8gom4zabnmgh37a34afuo33c
+cf807122aef0        openiamdocker/esb:debian-4.2.1.3-dev                       "docker-entrypoint.sh"   6 minutes ago       Up 6 minutes (healthy)   9080/tcp                                              openiam_esb.ksncftkkhz3y26bmqaywfpspp.26n3p1qy7oylday3j0hs0vhik
+232b9edad315        openiamdocker/device-manager:debian-4.2.1.3-dev            "docker-entrypoint.sh"   6 minutes ago       Up 6 minutes (healthy)                                                         openiam_device-manager.ksncftkkhz3y26bmqaywfpspp.pz92mtjsv3ptuvvwlbh9wcuog
+487ac3131765        openiamdocker/reconciliation:debian-4.2.1.3-dev            "docker-entrypoint.sh"   6 minutes ago       Up 6 minutes (healthy)                                                         openiam_reconciliation.ksncftkkhz3y26bmqaywfpspp.zlx7w9gg3vqj5ia8jacvqfb55
+3827befa3d1f        openiamdocker/idm:debian-4.2.1.3-dev                       "docker-entrypoint.sh"   6 minutes ago       Up 6 minutes (healthy)                                                         openiam_idm.ksncftkkhz3y26bmqaywfpspp.q5lvei2zeq16rypcw6z8htkm0
+a1ac17e8a2d9        openiamdocker/business-rule-manager:debian-4.2.1.3-dev     "docker-entrypoint.sh"   6 minutes ago       Up 6 minutes (healthy)   9080/tcp                                              openiam_business-rules-manager.ksncftkkhz3y26bmqaywfpspp.u8crdv7x03pqkqb0jzjk2hvhz
+06bd181aa756        openiamdocker/synchronization:debian-4.2.1.3-dev           "docker-entrypoint.sh"   6 minutes ago       Up 6 minutes (healthy)                                                         openiam_synchronization.ksncftkkhz3y26bmqaywfpspp.trvn7ga2b893g4ar5ryvhe7tp
+74522f1d70d4        openiamdocker/mariadb:debian-4.2.1.3-dev                   "init.sh /opt/bitnam…"   7 minutes ago       Up 7 minutes (healthy)   3306/tcp                                              database_database.1.2qc5on9ulrryts9kxiqve1uiq
+709f3e4b726b        openiamdocker/rabbitmq:alpine-4.2.1.3-dev                  "docker-entrypoint.s…"   7 minutes ago       Up 7 minutes (healthy)   4369/tcp, 5671-5672/tcp, 15691-15692/tcp, 25672/tcp   rabbitmq_service.1.n8ica3drohxny28rmjp2h9u1h
+a9800c406645        openiamdocker/janusgraph:debian-4.2.1.3-dev                "init.sh janusgraph"     7 minutes ago       Up 7 minutes (healthy)   8182/tcp                                              janusgraph_service.1.vfsd0bru25opxp5qlsp8r4mmj
+947be512677e        bitnami/cassandra:3.11.10                                  "/opt/bitnami/script…"   8 minutes ago       Up 8 minutes (healthy)   7000/tcp, 9042/tcp                                    cassandra_cassandra.1.zxwzz65rhjxjdmggg7nht43a6
+bcdaa21163b7        openiamdocker/elasticsearch:debian-4.2.1.3-dev             "init.sh"                8 minutes ago       Up 8 minutes (healthy)   9200/tcp, 9300/tcp                                    elasticsearch_service.ksncftkkhz3y26bmqaywfpspp.tfek9kdlkl74rk4z316vlp0ea
+3e6b357bfe7d        openiamdocker/redis:debian-4.2.1.3-dev                     "redis.sh /run.sh"       8 minutes ago       Up 8 minutes (healthy)   6379/tcp                                              redis_service.1.hecoo0fewnhaaei4cc1dkdfkf
+04e8aa482a1e        openiamdocker/vault:alpine-4.2.1.3-dev                     "docker-entrypoint.s…"   9 minutes ago       Up 9 minutes (healthy)   8200/tcp                                              vault_vault.1.vvu9ponz965i1qxcg06a9dyai
+43d905b6972b        bitnami/etcd:3.3.13                                        "/entrypoint.sh etcd"    9 minutes ago       Up 9 minutes             2379-2380/tcp                                         etcd_etcd.1.izu5hpgzmu5memyz2jxwbrlg4
+Validate the startup
+curl -k -I -L http://127.0.0.1/idp/login
+You should see output similar to the example below
+
+HTTP/1.1 200
+Date: Sun, 02 Jan 2022 20:33:40 GMT
+Server: Apache
+Report-To: { "group": "csp-endpoint",  "max_age": 10886400,  "endpoints": [        { "url": "http://127.0.0.1/selfservice/csp/report" }    ] }
+Content-Security-Policy: default-src 'self' blob: 'unsafe-inline' 'unsafe-eval'; script-src 'self' 'unsafe-inline' 'unsafe-eval' apis.google.com; style-src 'self' 'unsafe-inline' 'unsafe-eval' *; form-action 'self' 'unsafe-inline' 'unsafe-eval' *; img-src 'self' *; font-src 'self' *; report-uri /selfservice/csp/report; report-to csp-endpoint
+Access-Control-Allow-Origin: *
+X-Frame-Options: sameorigin
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 1; mode=block
+Cache-Control: no-cache
+Pragma: no-cache
+Expires: Wed, 31 Dec 1969 23:59:59 GMT
+X-UA-Compatible: IE=EmulateIE10
+x-openiam-force-auth: false
+x-openiam-login-uri: /idp/login
+Content-Type: text/html;charset=UTF-8
+Content-Language: en-US
+Content-Length: 4569
+Set-Cookie: SESSION=ZTgxMmJmNTktYTM1Zi00ZGY5LWFiNmMtZjhiNWNiOTVkNmVj; Path=/; HttpOnly; SameSite=Lax
+Vary: Accept-Encoding
+The application is now operational and you can login.
+
+First time login
+The final validation of our deployment is to be able to login to the OpenIAM web applications. To do this, must first find the IP address of our VM.
+
+Next open your browser (preferably Chrome or Firefox), and hit:
+
+http://[ip address of your installation ]/webconsole
+
+Use the following credentials for the first-time login:
+
+Username: sysadmin
+Password: passwd00
